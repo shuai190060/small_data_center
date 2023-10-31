@@ -1,0 +1,55 @@
+
+- hosts: localhost
+  become: false 
+  gather_facts: false 
+  tasks:
+    # 
+    - name: hello
+      shell: echo "hi"
+ 
+
+
+
+- name: provision mini data center 
+  hosts: all
+  become: true
+  vars:
+    db_password_file: "../credential/postgres.txt"
+    db_name: "account"
+
+  tasks:
+    - name: provision primary postgresql server 
+      when: 
+        - "'primary_server' in  group_names"
+      block:
+        - name: Import the repository signing key
+          apt_key:
+            url: https://www.postgresql.org/media/keys/ACCC4CF8.asc
+            state: present
+        
+        - name: Add repository
+          apt_repository:
+            repo: deb http://apt.postgresql.org/pub/repos/apt/ {{ ansible_distribution_release }}-pgdg main
+            state: present
+            update_cache: yes
+        - name: update the apt 
+          apt:
+            update_cache: yes
+
+        - name: install postgresql
+          apt: 
+            name: 
+            - postgresql-12
+            - postgresql-client-12
+            state: present
+        - name: start the postgres  
+          service:
+            name: postgresql
+            state: started
+            enabled: yes 
+        - name: set the password
+          shell: sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD '{{ lookup('file', db_password_file) | trim }}';"
+
+        - name: create database "account"
+          shell: sudo -u postgres psql -c "CREATE DATABASE IF NOT EXISTS {{ db_name }};"
+  
