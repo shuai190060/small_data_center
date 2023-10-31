@@ -1,0 +1,5 @@
+infrastucture/.terraform.lock.hcl
+infrastucture/.terraform
+infrastucture/terraform.tfstate
+infrastucture/terraform.tfstate.backup
+credential/
