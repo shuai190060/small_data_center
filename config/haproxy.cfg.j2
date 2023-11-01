@@ -1,0 +1,21 @@
+global
+	maxconn 100 
+
+
+
+defaults
+	mode tcp 
+	retries 2
+	timeout client 5m 
+	timeout server 5m 
+	timeout connect 5s 
+	timeout check 5s 
+
+
+frontend frontend_postgres
+	bind *:5432
+	default_backend backend_postgres
+backend backend_postgres
+	balance leastconn 
+	server server_1 {{ server_1_ip }}:5432 check 
+	server server_2 {{ server_2_ip }}:5432 check 

@@ -2,6 +2,8 @@
 - hosts: localhost
   become: false 
   gather_facts: false 
+  tags: 
+          - test 
   tasks:
     # get the server1 private ip
     - name: Get Server 1 Private IP from Terraform Output
@@ -29,6 +31,20 @@
     - name: Print Server 2 Private IP
       debug:
         msg: "Server 2 Private IP is: {{ server_2_private_ip }}"
+    # get the load balancer node's private IP
+    # get the server2 private ip
+    - name: Get haproxy Private IP from Terraform Output
+      shell: terraform output -json  | jq -r '.load_balancer_private.value'
+      register: haproxy_server_ip
+      delegate_to: localhost
+      become: false
+
+    - name: Set Fact for haproxy server Private IP
+      set_fact:
+        haproxy_server_ip: "{{ haproxy_server_ip.stdout }}"
+    - name: Print haproxy server Private IP
+      debug:
+        msg: "HAproxy IP is: {{ haproxy_server_ip }}"
  
 
 
@@ -42,6 +58,7 @@
     postgres_bin: "/usr/lib/postgresql/15/bin"
     server_1_ip: "{{ hostvars['localhost']['server_1_private_ip'] }}"
     server_2_ip: "{{ hostvars['localhost']['server_2_private_ip'] }}"
+    haproxy_server_ip: "{{ hostvars['localhost']['haproxy_server_ip'] }}"
   environment:
     PATH: "{{ postgres_bin }}:{{ ansible_env.PATH }}"
   
@@ -154,7 +171,9 @@
             src: ../config/pg_hba.conf.j2
             dest: /tmp/db/pg_hba.conf 
           changed_when: true 
-
+        - name: reload postgres
+          command: "/usr/lib/postgresql/15/bin/pg_ctl -D /tmp/db restart"
+          become_user: postgres
 #--------------------------------------------------------------------------------------
 # replica database
 #--------------------------------------------------------------------------------------
@@ -225,8 +244,13 @@
           when: inventory_hostname == "server_1"
           shell: 
             cmd: pg_basebackup -h 10.3.0.151 -U repuser --checkpoint=fast -D /tmp/replica_db_1/ -R --slot=server1 -C --port=5432
-            creates: /tmp/replica_db/standby.signal
+            creates: /tmp/replica_db_1/standby.signal
           become_user: postgres
+        - name: Provision postgres pg_hba.conf for server1 
+          template:
+            src: ../config/pg_hba.conf.j2
+            dest: /tmp/replica_db_1/pg_hba.conf 
+          changed_when: true 
 
         - name: kill all the 5432 port consumer on the server 
           when: inventory_hostname == "server_1"
@@ -246,8 +270,13 @@
           when: inventory_hostname == "server_2"
           shell: 
             cmd: pg_basebackup -h 10.3.0.151 -U repuser --checkpoint=fast -D /tmp/replica_db_2/ -R --slot=server2 -C --port=5432
-            creates: /tmp/replica_db/standby.signal
+            creates: /tmp/replica_db_2/standby.signal
           become_user: postgres
+        - name: Provision postgres pg_hba.conf 
+          template:
+            src: ../config/pg_hba.conf.j2
+            dest: /tmp/replica_db_2/pg_hba.conf 
+          changed_when: true 
 
         - name: kill all the 5432 port consumer on the server 
           when: inventory_hostname == "server_2"
@@ -266,14 +295,48 @@
 # load balancer
 #--------------------------------------------------------------------------------------
     - name: provision the haproxy for the replicas
+      tags: 
+      - test 
       when: 
           - "'load_balancer' in  group_names"
       block:
+        - name: Import the repository signing key
+          apt_key:
+            url: https://www.postgresql.org/media/keys/ACCC4CF8.asc
+            state: present
+        
+        - name: Add repository
+          apt_repository:
+            repo: deb http://apt.postgresql.org/pub/repos/apt/ {{ ansible_distribution_release }}-pgdg main
+            state: present
+            update_cache: yes
+        - name: update the apt 
+          apt:
+            update_cache: yes
+
         - name: install haproxy
           apt:
             name:
               - haproxy
+              - postgresql-15
+              - postgresql-client-15
             state: present
             update_cache: true 
-          tags: 
-          - test
+        - name: fetch the haproxy.cfg file
+          fetch:
+            src: /etc/haproxy/haproxy.cfg
+            dest: ../config/haproxy.cfg
+            flat: yes 
+        - name: Provision haproxy.cfg file in the server 
+          template:
+            src: ../config/haproxy.cfg.j2
+            dest: /etc/haproxy/haproxy.cfg 
+          changed_when: true 
+        - name: restart the haproxy server
+          service:
+            name: haproxy
+            state: restarted 
+
+#--------------------------------------------------------------------------------------
+# pgbouncer server
+#--------------------------------------------------------------------------------------

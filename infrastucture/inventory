@@ -1,10 +1,10 @@
 
 [load_balancer]
-load_balancer ansible_host=3.92.210.219 ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/ansible
+load_balancer_server ansible_host=3.92.179.206 ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/ansible
 [pg_bouncer]
-pgbouncer_server ansible_host=44.211.152.122 ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/ansible
+pgbouncer_server ansible_host=3.83.54.60 ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/ansible
 [primary_server]
-primary_server ansible_host=54.165.243.192 ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/ansible
+primary_server ansible_host=54.145.134.221 ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/ansible
 [replicas]
-server_1 ansible_host=54.159.134.144 ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/ansible
-server_2 ansible_host=3.90.248.77 ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/ansible
+server_1 ansible_host=3.93.13.144 ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/ansible
+server_2 ansible_host=54.175.234.185 ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/ansible

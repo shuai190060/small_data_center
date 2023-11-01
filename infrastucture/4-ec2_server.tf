@@ -37,7 +37,7 @@ resource "aws_instance" "pgbouncer_server" {
   #   iam_instance_profile = 
 
   tags = {
-    Name = "server_1"
+    Name = "pgbouncer_server"
   }
 }
 
@@ -53,7 +53,7 @@ resource "aws_instance" "primary_server" {
   #   iam_instance_profile = 
 
   tags = {
-    Name = "server_1"
+    Name = "primary_server"
   }
 }
 
@@ -98,6 +98,10 @@ resource "aws_instance" "server" {
 
 output "load_balancer_node" {
   value = aws_instance.load_balancer_node.public_ip
+}
+
+output "load_balancer_private" {
+  value = aws_instance.load_balancer_node.private_ip
 }
 
 output "primary_server" {
