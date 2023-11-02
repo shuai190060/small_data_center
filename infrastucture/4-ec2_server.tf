@@ -108,6 +108,10 @@ output "primary_server" {
   value = aws_instance.primary_server.public_ip
 }
 
+output "primary_server_private" {
+  value = aws_instance.primary_server.private_ip
+}
+
 output "pgbouncer_public" {
   value = aws_instance.pgbouncer_server.public_ip
 
