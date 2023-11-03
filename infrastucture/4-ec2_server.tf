@@ -29,7 +29,7 @@ resource "aws_instance" "pgbouncer_server" {
   ami                         = "ami-053b0d53c279acc90"
   instance_type               = "t2.micro"
   subnet_id                   = aws_subnet.public_1.id
-  vpc_security_group_ids      = [aws_security_group.pgbouncer_sg.id]
+  vpc_security_group_ids      = [aws_security_group.load_balancer_server.id]
   associate_public_ip_address = true
 
 
@@ -37,7 +37,7 @@ resource "aws_instance" "pgbouncer_server" {
   #   iam_instance_profile = 
 
   tags = {
-    Name = "pgbouncer_server"
+    Name = "load_balancer_server_additional"
   }
 }
 
@@ -117,7 +117,7 @@ output "pgbouncer_public" {
 
 }
 
-output "pgbouncer_private" {
+output "additional_haproxy" {
   value = aws_instance.pgbouncer_server.private_ip
 
 }

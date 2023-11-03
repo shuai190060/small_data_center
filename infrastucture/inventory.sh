@@ -18,10 +18,10 @@ echo $master >> inventory
 
 
 # create pgbouncer group
-echo "[pg_bouncer]" >> inventory
-pgbouncer_server="pgbouncer_server ansible_host={PG_BOUNCER} ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/ansible"
-pgbouncer_server=$(echo "$pgbouncer_server" | sed "s/{PG_BOUNCER}/$PG_BOUNCER/g")
-echo $pgbouncer_server >> inventory
+echo "[additional_haproxy]" >> inventory
+haproxy_server="haproxy_server ansible_host={PG_BOUNCER} ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/ansible"
+haproxy_server=$(echo "$haproxy_server" | sed "s/{PG_BOUNCER}/$PG_BOUNCER/g")
+echo $haproxy_server >> inventory
 
 
 # create load balancer group

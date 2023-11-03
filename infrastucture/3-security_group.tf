@@ -25,6 +25,13 @@ resource "aws_security_group" "load_balancer_server" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # expose this port for load balancing and keepalived the postgres service
+  ingress {
+    from_port   = 5433
+    to_port     = 5433
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
 
   egress {
@@ -65,12 +72,33 @@ resource "aws_security_group" "server_node_sg" {
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  ingress {
+    from_port   = 5433
+    to_port     = 5433
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
   // postgresql
   ingress {
     from_port   = 5432
     to_port     = 5432
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
+  }
+// associate with haproxy sg
+  ingress {
+    from_port   = 5433
+    to_port     = 5433
+    protocol    = "tcp"
+    security_groups  = [aws_security_group.load_balancer_server.id]
+  }
+  // associate with haproxy sg
+  ingress {
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    security_groups  = [aws_security_group.load_balancer_server.id]
   }
 
   egress {
@@ -104,6 +132,12 @@ resource "aws_security_group" "pgbouncer_sg" {
   ingress {
     from_port   = 80
     to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
+    from_port   = 5433
+    to_port     = 5433
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }

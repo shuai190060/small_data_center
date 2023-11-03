@@ -1,0 +1,14 @@
+vrrp_instance {{ name }} {
+    state {{ state }}
+    interface eth0  # change to your network interface name
+    virtual_router_id 51
+    priority 100
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass {{ lookup('file', db_password_file) | trim }} 
+    }
+    virtual_ipaddress {
+        {{ ip_for_keepalived }}/24 
+    }
+}

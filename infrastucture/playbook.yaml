@@ -57,6 +57,19 @@
     - name: Print primary server Private IP
       debug:
         msg: "'primary_server_private' IP is: {{ primary_server_private }}"
+    # get the additional haproxy server's private IP
+    - name: Get primary Private IP from Terraform Output
+      shell: terraform output -json  | jq -r '.additional_haproxy.value'
+      register: additional_haproxy
+      delegate_to: localhost
+      become: false
+
+    - name: Set Fact for primary server Private IP
+      set_fact:
+        additional_haproxy: "{{ additional_haproxy.stdout }}"
+    - name: Print primary server Private IP
+      debug:
+        msg: "'additional_haproxy' IP is: {{ additional_haproxy }}"
  
 
 
@@ -75,6 +88,10 @@
     server_1_ip: "{{ hostvars['localhost']['server_1_private_ip'] }}"
     server_2_ip: "{{ hostvars['localhost']['server_2_private_ip'] }}"
     haproxy_server_ip: "{{ hostvars['localhost']['haproxy_server_ip'] }}"
+    additional_haproxy: "{{ hostvars['localhost']['additional_haproxy'] }}"
+    ip_for_keepalived: "10.3.0.100"
+    haproxy_1: "haproxy_1"
+    haproxy_2: "haproxy_2"
   environment:
     PATH: "{{ postgres_bin }}:{{ ansible_env.PATH }}"
   
@@ -133,12 +150,7 @@
             dest: ../config/postgresql.conf
             flat: yes 
 
-        # - name: kill all the 5432 port consumer on the server 
-        #   shell: |
-        #     pid=$(sudo lsof -t -i :5432)
-        #     if [ -n "$pid" ]; then
-        #       sudo kill -9 $pid
-        #     fi
+
         - name: Provision postgres Configuration
           template:
             src: ../config/postgresql.conf.j2
@@ -147,10 +159,19 @@
           changed_when: true 
           vars:
             var: "{{ primary_data_path }}"
+        
+        - name: kill all the 5432 port consumer on the server 
+          shell: |
+            pid=$(sudo lsof -t -i :5432)
+            if [ -n "$pid" ]; then
+              sudo kill -9 $pid
+            fi
 
         - name: reload postgres
-          command: "/usr/lib/postgresql/15/bin/pg_ctl -D /tmp/db reload"
+          command: "/usr/lib/postgresql/15/bin/pg_ctl -D /tmp/db start"
           become_user: postgres
+          async: 60 # Run the task asynchronously for up to 60 seconds
+          poll: 0
 
         - name: Add the extention
           shell: sudo -u postgres psql -p 5432  -c "create extension pg_stat_statements;"
@@ -253,13 +274,13 @@
             state: started 
         # - name: set the password
         #   shell: sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD '{{ lookup('file', db_password_file) | trim }}';"
-        - name: Check if "account" database exists
-          shell: sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='account';"
-          register: db_exists
-          ignore_errors: true
-        - name: create database "account"
-          shell: sudo -u postgres psql -c "CREATE DATABASE {{ db_name }};"
-          when: db_exists.stdout == ""
+        # - name: Check if "account" database exists
+        #   shell: sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='account';"
+        #   register: db_exists
+        #   ignore_errors: true
+        # - name: create database "account"
+        #   shell: sudo -u postgres psql -c "CREATE DATABASE {{ db_name }};"
+        #   when: db_exists.stdout == ""
         
         
         # REPLICAS_1 
@@ -292,20 +313,6 @@
             src: ../config/pg_hba.conf.j2
             dest: /etc/postgresql/15/main/pg_hba.conf 
           changed_when: true 
-
-        # - name: kill all the 5432 port consumer on the server 
-        #   when: inventory_hostname == "server_1"
-        #   shell: |
-        #     pid=$(sudo lsof -t -i :5432)
-        #     if [ -n "$pid" ]; then
-        #       sudo kill -9 $pid
-        #     fi
-
-        # - name: reload postgres
-        #   when: inventory_hostname == "server_1"
-        #   command: "/usr/lib/postgresql/15/bin/pg_ctl -D /tmp/replica_db_1 reload"
-        #   become_user: postgres
-
         # REPLICAS_2 
         # connect to host as replicas, and save file to /tmp/replica_db_2
         - name: Ensure data directory is empty
@@ -356,9 +363,8 @@
 #--------------------------------------------------------------------------------------
 # load balancer
 #--------------------------------------------------------------------------------------
-    - name: provision the haproxy for the replicas
-      tags: 
-      - test 
+    - name: provision the haproxy server B for the replicas
+      
       when: 
           - "'load_balancer' in  group_names"
       block:
@@ -376,12 +382,13 @@
           apt:
             update_cache: yes
 
-        - name: install haproxy
+        - name: install haproxy and keepalived and postgres for testing
           apt:
             name:
               - haproxy
               - postgresql-15
               - postgresql-client-15
+              - keepalived
             state: present
             update_cache: true 
         - name: fetch the haproxy.cfg file
@@ -398,25 +405,83 @@
           service:
             name: haproxy
             state: restarted 
+        - name: Provision keepalived.conf 
+          template:
+            src: ../config/keepalived.conf.j2
+            dest: /etc/keepalived/keepalived.conf 
+          changed_when: true 
+          vars:
+            name: "haproxy_1"
+            state: "MASTER"
+            watched_ip: "{{ additional_haproxy }}"
+        - name: restart the keepalived server
+          tags: 
+            - test 
+          service:
+            name: keepalived
+            state: restarted 
+        
+
 
 #--------------------------------------------------------------------------------------
-# pgbouncer server
+# haproxy server B
 #--------------------------------------------------------------------------------------
-    - name: provision the pg_bouncer for the haproxy server 
-      tags: 
-      - test 
+    - name: provision the haproxy server B for the replicas
+      
       when: 
-          - "'pg_bouncer' in  group_names"
+          - "'additional_haproxy' in  group_names"
       block:
+        - name: Import the repository signing key
+          apt_key:
+            url: https://www.postgresql.org/media/keys/ACCC4CF8.asc
+            state: present
+        
+        - name: Add repository
+          apt_repository:
+            repo: deb http://apt.postgresql.org/pub/repos/apt/ {{ ansible_distribution_release }}-pgdg main
+            state: present
+            update_cache: yes
+        - name: update the apt 
+          apt:
+            update_cache: yes
 
-        - name: install pg_bouncer
+        - name: install haproxy and keepalived and postgres for testing
           apt:
             name:
-              - pgbouncer
+              - haproxy
+              - postgresql-15
+              - postgresql-client-15
+              - keepalived
             state: present
             update_cache: true 
-        - name: fetch the /etc/pgbouncer/pgbouncer.ini 
+        - name: fetch the haproxy.cfg file
           fetch:
-            src: /etc/pgbouncer/pgbouncer.ini 
-            dest: ../config/pgbouncer.ini
+            src: /etc/haproxy/haproxy.cfg
+            dest: ../config/haproxy.cfg
             flat: yes 
+        - name: Provision haproxy.cfg file in the server 
+          template:
+            src: ../config/haproxy.cfg.j2
+            dest: /etc/haproxy/haproxy.cfg 
+          changed_when: true 
+        - name: restart the haproxy server
+          service:
+            name: haproxy
+            state: restarted 
+        - name: Provision keepalived.conf 
+          template:
+            src: ../config/keepalived.conf.j2
+            dest: /etc/keepalived/keepalived.conf 
+          changed_when: true 
+          vars:
+            name: "haproxy_2"
+            state: "BACKUP"
+            watched_ip: "{{ haproxy_server_ip }}"
+        - name: restart the keepalived server
+          tags: 
+            - test 
+          service:
+            name: keepalived
+            state: restarted 
+
+
