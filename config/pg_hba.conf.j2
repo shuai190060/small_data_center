@@ -92,6 +92,7 @@ host    all             all             127.0.0.1/32            trust
 host    account    repuser    {{ server_1_ip }}/32    trust
 host    account    repuser    {{ server_2_ip }}/32     trust
 host    account    repuser    {{ haproxy_server_ip }}/32      trust 
+host    account    repuser    {{ additional_haproxy }}/32      trust 
 host    replication             repuser        {{ server_1_ip }}/32            trust
 host    replication             repuser        {{ server_2_ip }}/32            trust
 # IPv6 local connections:
